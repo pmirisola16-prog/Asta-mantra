@@ -511,6 +511,7 @@ input.note-input{width:120px;padding:4px 6px;font-size:12px;}
       <div class="field" style="max-width:220px;">
         <label for="fb-room">Codice stanza (uguale per tutti i partecipanti)</label>
         <input type="text" id="fb-room" placeholder="es. asta-ufficio-2026">
+        <button class="btn ghost" id="btn-cambia-stanza" style="display:none;margin-top:8px;padding:7px 14px;font-size:12.5px;">↪ Entra in questa stanza</button>
       </div>
     </div>
 
@@ -1012,13 +1013,17 @@ function fbUiState(state, extra){
   // state: 'idle' | 'needLogin' | 'connected' | 'error'
   const loginBlock = document.getElementById('fb-login-block');
   const disconnectBtn = document.getElementById('btn-fb-disconnect');
+  const switchBtn = document.getElementById('btn-cambia-stanza');
   if(state === 'needLogin'){
     loginBlock.style.display = '';
     disconnectBtn.style.display = 'none';
+    if(switchBtn) switchBtn.style.display = 'none';
   } else if(state === 'connected'){
     loginBlock.style.display = 'none';
     disconnectBtn.style.display = '';
+    if(switchBtn) switchBtn.style.display = '';
   } else {
+    if(switchBtn) switchBtn.style.display = 'none';
     loginBlock.style.display = '';
     disconnectBtn.style.display = 'none';
   }
@@ -1174,14 +1179,81 @@ async function stopPresence(){
 }
 
 // Passo 2: una volta autenticati, entra davvero nella stanza condivisa
-async function joinRoom(auto){
+// Cambio stanza senza dover uscire e rientrare: si resta autenticati, si staccano gli ascolti
+// dalla vecchia stanza e si entra nella nuova. Utile per tenere aste diverse (leghe, soci
+// diversi) sullo stesso account.
+async function switchRoom(){
+  const statusEl = document.getElementById('fb-config-status');
+  const nuova = document.getElementById('fb-room').value.trim();
+  if(!nuova){ statusEl.style.color='var(--danger)'; statusEl.textContent='Scrivi un codice stanza.'; return; }
+  const vietati = nuova.match(/[.#$\[\]]/g);
+  if(vietati){
+    statusEl.style.color='var(--danger)';
+    statusEl.textContent = 'Il codice stanza "' + nuova + '" contiene un carattere non ammesso (' + [...new Set(vietati)].join(' ') + '). Usa solo lettere, numeri, trattini e underscore.';
+    return;
+  }
+  if(!fbConnected){ await initFirebaseApp(false); return; }
+  if(nuova === fbRoom){
+    statusEl.style.color='var(--muted2)';
+    statusEl.textContent = 'Sei già nella stanza "' + nuova + '".';
+    return;
+  }
+
+  // vediamo se la stanza di destinazione contiene già un'asta
+  let occupata = false;
+  try{
+    const s1 = await fbDb.ref('rooms/' + nuova + '/rosa').once('value');
+    const s2 = await fbDb.ref('rooms/' + nuova + '/prefs').once('value');
+    occupata = s1.exists() || s2.exists();
+  }catch(e){
+    statusEl.style.color='var(--danger)';
+    statusEl.textContent = 'Non riesco a leggere la stanza "' + nuova + '": ' + e.message;
+    return;
+  }
+
+  let partireDaZero = false;
+  if(occupata){
+    if(!(await customConfirm('La stanza "' + nuova + '" contiene già un\'asta. Confermi di entrarci? I dati di quella stanza sostituiranno quelli che vedi adesso su questo dispositivo (la stanza "' + fbRoom + '" resta intatta).'))) return;
+  } else {
+    partireDaZero = await customConfirm('La stanza "' + nuova + '" è vuota.\n\nCONFERMA = asta nuova da zero (rosa, preferiti e piano azzerati).\nANNULLA = porta in questa stanza l\'asta che hai adesso (ne fai una copia).');
+  }
+
+  // stacca tutto dalla vecchia stanza
+  await stopPresence();
+  stopChat();
+  detachFirebaseListeners();
+  fbConnected = false;
+  fbRoom = nuova;
+
+  if(partireDaZero){
+    await applySnapshot({
+      settings: { budget: settings.budget, nPortieri: settings.nPortieri, nMovimento: settings.nMovimento },
+      prefs:{}, rosa:[], modulo:'4-3-3',
+      fasceCosti: prezziPerBudget(settings.budget || 1000),
+      pianoRosa: {}, rolePriority: { ...ROLE_PRIORITY_DEFAULT },
+      listoneMeta, customPlayers: (listoneMeta && listoneMeta.importedAt) ? PLAYERS : null,
+      statsData, statsMeta
+    });
+  }
+  currentSaveId = null; currentSaveName = null;
+  await saveCurrentPointer();
+  // se la stanza aveva già dati li carichiamo, altrimenti ci portiamo dentro lo stato locale
+  await joinRoom(false, occupata ? 'pull' : 'push');
+  renderAuctionStatus(); renderAuctionsTable();
+}
+document.getElementById('btn-cambia-stanza').addEventListener('click', switchRoom);
+
+async function joinRoom(auto, scelta){
   const statusEl = document.getElementById('fb-config-status');
   const room = fbRoom;
   try{
     const snap = await fbDb.ref('rooms/' + room + '/rosa').once('value');
     const remoteHasData = snap.exists();
     let pullRemote = true;
-    if(remoteHasData && !auto){
+    // "scelta" arriva dal cambio stanza, dove la domanda è già stata posta: evita di chiederlo due volte
+    if(scelta === 'pull') pullRemote = true;
+    else if(scelta === 'push') pullRemote = false;
+    else if(remoteHasData && !auto){
       pullRemote = await customConfirm('Nella stanza "' + room + '" ci sono già dati condivisi. Conferma per caricarli qui (sostituendo quello che hai adesso su questo dispositivo). Annulla per tenere i tuoi dati locali e sovrascrivere quelli condivisi con questi.');
     }
     if(pullRemote){
