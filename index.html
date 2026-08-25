@@ -291,6 +291,11 @@ input.note-input{width:120px;padding:4px 6px;font-size:12px;}
 }
 .chip-toggle.active{color:var(--gold);border-color:var(--gold);}
 .count-badge{color:var(--muted2);font-size:12px;margin-left:auto;}
+.filters-num{margin-top:-4px;align-items:center;}
+.filters-label{color:var(--muted2);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;}
+.num-filter{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);
+  text-transform:none;letter-spacing:0;margin:0;}
+.num-filter input{width:62px;padding:5px 7px;font-size:12px;}
 
 /* ---------- import listone ---------- */
 .import-box{
@@ -562,9 +567,20 @@ input.note-input{width:120px;padding:4px 6px;font-size:12px;}
         <option value="Mio">Presi da me</option>
         <option value="Altri">Presi da altri</option>
       </select>
+      <select id="f-squadra"><option value="">Tutte le squadre</option></select>
       <div class="chip-toggle" id="f-preferiti"><span>★</span> Solo preferiti</div>
       <button class="btn ghost" id="btn-azzera-listone" style="padding:7px 14px;font-size:12.5px;">🧹 Azzera preferiti e fasce</button>
       <span class="count-badge" id="listone-count"></span>
+    </div>
+    <div class="filters filters-num">
+      <span class="filters-label">Valori minimi:</span>
+      <label class="num-filter">Qt.A <input type="number" id="f-min-qtam" min="0" placeholder="—"></label>
+      <label class="num-filter">FVM <input type="number" id="f-min-fvmm" min="0" placeholder="—"></label>
+      <label class="num-filter">Presenze <input type="number" id="f-min-pv" min="0" placeholder="—"></label>
+      <label class="num-filter">Gol <input type="number" id="f-min-gol" min="0" placeholder="—"></label>
+      <label class="num-filter">Assist <input type="number" id="f-min-ass" min="0" placeholder="—"></label>
+      <label class="num-filter">Fantamedia <input type="number" id="f-min-fm" min="0" step="0.1" placeholder="—"></label>
+      <button class="btn ghost" id="btn-azzera-filtri" style="padding:6px 12px;font-size:12px;">Azzera filtri</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -896,7 +912,8 @@ function ensureCoreState(){
 }
 
 let listoneSort = { key: 'qtam', dir: -1 };
-let listoneFilter = { search: '', ruolo: '', stato: '', soloPreferiti: false };
+let listoneFilter = { search: '', ruolo: '', stato: '', squadra: '', soloPreferiti: false,
+                      minQtam: null, minFvmm: null, minPv: null, minGol: null, minAss: null, minFm: null };
 
 function normNome(s){ return String(s||'').trim().toLowerCase(); }
 function applyStats(){
@@ -1809,12 +1826,26 @@ function passesFilter(p){
     if(!String(p.nome).toLowerCase().includes(s) && !String(p.sq).toLowerCase().includes(s)) return false;
   }
   if(stato && statoOf(p.nome) !== stato) return false;
+  if(listoneFilter.squadra && p.sq !== listoneFilter.squadra) return false;
   if(soloPreferiti && !getPref(p.nome).pref) return false;
+  // filtri numerici: si applicano solo se valorizzati. Un giocatore senza il dato
+  // (es. statistiche non importate) viene escluso quando si filtra su quel dato.
+  const minimi = [
+    [listoneFilter.minQtam, p.qtam], [listoneFilter.minFvmm, p.fvmm],
+    [listoneFilter.minPv, p.pv],     [listoneFilter.minGol, p.gol],
+    [listoneFilter.minAss, p.ass],   [listoneFilter.minFm, p.fm]
+  ];
+  for(const [soglia, valore] of minimi){
+    if(soglia === null || soglia === undefined) continue;
+    if(valore === null || valore === undefined || isNaN(valore)) return false;
+    if(Number(valore) < soglia) return false;
+  }
   return true;
 }
 
 function renderListone(){
   ensureCoreState();
+  popolaFiltroSquadre();
   const tbody = document.getElementById('listone-body');
   let rows = PLAYERS.filter(passesFilter);
   const { key, dir } = listoneSort;
@@ -1894,6 +1925,38 @@ function renderListone(){
 document.getElementById('f-search').addEventListener('input', e=>{ listoneFilter.search = e.target.value; renderListone(); });
 document.getElementById('f-ruolo').addEventListener('change', e=>{ listoneFilter.ruolo = e.target.value; renderListone(); });
 document.getElementById('f-stato').addEventListener('change', e=>{ listoneFilter.stato = e.target.value; renderListone(); });
+document.getElementById('f-squadra').addEventListener('change', e=>{ listoneFilter.squadra = e.target.value; renderListone(); });
+// filtri numerici: campo vuoto = filtro disattivato
+const FILTRI_NUM = {
+  'f-min-qtam':'minQtam', 'f-min-fvmm':'minFvmm', 'f-min-pv':'minPv',
+  'f-min-gol':'minGol',   'f-min-ass':'minAss',   'f-min-fm':'minFm'
+};
+Object.keys(FILTRI_NUM).forEach(id=>{
+  document.getElementById(id).addEventListener('input', e=>{
+    const v = e.target.value.trim();
+    listoneFilter[FILTRI_NUM[id]] = (v === '') ? null : Number(v);
+    renderListone();
+  });
+});
+document.getElementById('btn-azzera-filtri').addEventListener('click', ()=>{
+  Object.keys(FILTRI_NUM).forEach(id=>{ document.getElementById(id).value=''; listoneFilter[FILTRI_NUM[id]] = null; });
+  document.getElementById('f-squadra').value = ''; listoneFilter.squadra = '';
+  document.getElementById('f-search').value = ''; listoneFilter.search = '';
+  document.getElementById('f-ruolo').value = ''; listoneFilter.ruolo = '';
+  document.getElementById('f-stato').value = ''; listoneFilter.stato = '';
+  listoneFilter.soloPreferiti = false;
+  document.getElementById('f-preferiti').classList.remove('active');
+  renderListone();
+});
+// il menu delle squadre si ricostruisce dal listone attivo, così resta valido anche dopo un import
+function popolaFiltroSquadre(){
+  const sel = document.getElementById('f-squadra');
+  const attuale = sel.value;
+  const squadre = [...new Set(PLAYERS.map(p=>p.sq).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+  sel.innerHTML = '<option value="">Tutte le squadre</option>' +
+    squadre.map(sq=>`<option value="${escAttr(sq)}">${escHtml(sq)}</option>`).join('');
+  if(squadre.includes(attuale)) sel.value = attuale; else listoneFilter.squadra = '';
+}
 document.getElementById('f-preferiti').addEventListener('click', function(){
   listoneFilter.soloPreferiti = !listoneFilter.soloPreferiti;
   this.classList.toggle('active', listoneFilter.soloPreferiti);
