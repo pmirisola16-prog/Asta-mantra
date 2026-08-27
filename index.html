@@ -191,6 +191,19 @@ main{padding:26px 32px 60px 32px;max-width:1240px;margin:0 auto;}
 h2{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:0 0 4px 0;font-weight:600;}
 .panel-desc{color:var(--muted);font-size:13px;margin:0;max-width:560px;line-height:1.5;}
 
+/* ---------- accordion (tendine) ---------- */
+.acc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:16px;overflow:hidden;}
+.acc>summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:14px;user-select:none;}
+.acc>summary::-webkit-details-marker{display:none;}
+.acc>summary:hover{background:var(--surface2);}
+.acc>summary .acc-title{display:flex;flex-direction:column;gap:4px;}
+.acc>summary .acc-title h2{margin:0;}
+.acc>summary .acc-arrow{flex:0 0 auto;color:var(--muted);font-size:12px;transition:transform .2s;transform:rotate(-90deg);}
+.acc[open]>summary .acc-arrow{transform:rotate(0deg);}
+.acc[open]>summary{border-bottom:1px solid var(--line);}
+.acc-body{padding:18px;}
+.acc-body>.panel-head:first-child,.acc-body>.table-wrap:first-child{margin-top:0;}
+
 /* ---------- cards ---------- */
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px;}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
@@ -632,10 +645,12 @@ thead th.sorted{color:var(--accent);}
 
   <!-- BUDGET -->
   <section class="panel" id="panel-budget">
-    <div class="panel-head">
-      <div><h2>Piano rosa per ruolo e fascia</h2><p class="panel-desc">Inserisci i prezzi medi di mercato per ruolo e fascia, poi genera il piano automatico: il sistema calcola quanti giocatori per ruolo e come dividerli tra le fasce, dato il budget e l'ordine di priorità. Puoi sempre modificare a mano il risultato.</p></div>
-    </div>
-
+    <details class="acc" id="acc-piano">
+      <summary>
+        <div class="acc-title"><h2>Piano rosa per ruolo e fascia</h2><p class="panel-desc">Inserisci i prezzi medi di mercato per ruolo e fascia, poi genera il piano automatico: il sistema calcola quanti giocatori per ruolo e come dividerli tra le fasce, dato il budget e l'ordine di priorità. Puoi sempre modificare a mano il risultato.</p></div>
+        <span class="acc-arrow">▾</span>
+      </summary>
+    <div class="acc-body">
     <p class="footer-note" id="modulo-hint">&nbsp;</p>
 
     <div class="table-wrap" style="margin-bottom:14px;max-height:none;">
@@ -677,22 +692,27 @@ thead th.sorted{color:var(--accent);}
     <p class="footer-note">
       "Slot nel modulo" = quanti slot del modulo attivo possono ospitare quel ruolo, contando anche quelli condivisi con altri ruoli (es. uno slot "M/C" conta 1 sia per M sia per C). Se un ruolo ha slot disponibili ma 0 titolari, significa che i suoi unici slot sono condivisi e nel piano sono stati assegnati al ruolo con priorità più alta: quel ruolo resta comunque schierabile, semplicemente il piano preferisce coprire quegli slot con l'altro. "Obiettivo da modulo" = quanti giocatori di quel ruolo servirebbero per coprire titolari + panchina, calcolato dal modulo attivo e dagli slot di rosa nelle Impostazioni — tra parentesi quanti di quei posti sono titolari veri (quelli che competono per la 1ª fascia). "Già presi" li conto dalla Rosa usando il ruolo Mantra principale e la fascia assegnata nel Listone (senza fascia, li conto prudenzialmente in 2ª). "Costo residuo pianificato" = quanto ti costerebbe completare il piano ai prezzi medi di fascia.
     </p>
+    </div>
+    </details>
 
-    <div style="height:1px;background:var(--line);margin:28px 0;"></div>
-
-    <div class="panel-head">
-      <div><h2>Giocatori consigliati per ruolo e fascia</h2><p class="panel-desc">Classifica da solo ogni giocatore in 1ª/2ª/3ª fascia dentro il suo ruolo, confrontando quotazione (e fantamedia, se hai importato le statistiche) con gli altri giocatori dello stesso ruolo — non serve che tu imposti nulla prima. Rispetta chi hai già segnato a mano nel Listone.</p></div>
-    </div>
-    <div class="row" style="margin-bottom:16px;">
-      <button class="btn" id="btn-genera-consigliati">🎯 Genera consigliati</button>
-    </div>
-    <div class="table-wrap" style="max-height:none;">
-      <table>
-        <thead><tr><th>Ruolo</th><th>1ª fascia</th><th>2ª fascia</th><th>3ª fascia</th></tr></thead>
-        <tbody id="consigliati-body"></tbody>
-      </table>
-    </div>
-    <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.</p>
+    <details class="acc" id="acc-consigliati" open>
+      <summary>
+        <div class="acc-title"><h2>Giocatori consigliati per ruolo e fascia</h2><p class="panel-desc">Classifica da solo ogni giocatore in 1ª/2ª/3ª fascia dentro il suo ruolo, confrontando quotazione (e fantamedia, se hai importato le statistiche) con gli altri giocatori dello stesso ruolo — non serve che tu imposti nulla prima. Rispetta chi hai già segnato a mano nel Listone.</p></div>
+        <span class="acc-arrow">▾</span>
+      </summary>
+      <div class="acc-body">
+      <div class="row" style="margin-bottom:16px;">
+        <button class="btn" id="btn-genera-consigliati">🎯 Genera consigliati</button>
+      </div>
+      <div class="table-wrap" style="max-height:none;">
+        <table>
+          <thead><tr><th>Ruolo</th><th>1ª fascia</th><th>2ª fascia</th><th>3ª fascia</th></tr></thead>
+          <tbody id="consigliati-body"></tbody>
+        </table>
+      </div>
+      <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.</p>
+      </div>
+    </details>
   </section>
 
   <!-- FORMAZIONE -->
@@ -2041,7 +2061,8 @@ document.querySelectorAll('#panel-listone thead th[data-sort]').forEach(th=>{
     const key = th.dataset.sort;
     const i = listoneSort.findIndex(o => o.key === key);
     if(i < 0){
-      // 1° clic: attiva. Testo dalla A alla Z, numeri dal più grande al più piccolo.
+      // 1° clic: attiva, come criterio aggiuntivo dopo quelli già presenti.
+      // Testo dalla A alla Z, numeri dal più grande al più piccolo.
       listoneSort.push({ key, dir: COLONNE_TESTO.includes(key) ? 1 : -1 });
     } else if(listoneSort[i].dir === (COLONNE_TESTO.includes(key) ? 1 : -1)){
       listoneSort[i].dir *= -1;   // 2° clic: inverte
