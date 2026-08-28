@@ -19,17 +19,17 @@ if(typeof XLSX === 'undefined'){
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <style>
 :root{
-  --bg:#131415;
-  --sidebar:#171819;
-  --surface:#1C1E1F;
-  --surface2:#232628;
-  --surface3:#2B2F31;
-  --line:rgba(255,255,255,0.08);
-  --line-strong:rgba(255,255,255,0.15);
-  --text:#E8E9EA;
-  --muted:#9A9EA1;
-  --muted2:#6E7275;
-  --accent:#2FBF71;
+  --bg:#1B1C1E;
+  --sidebar:#202123;
+  --surface:#252729;
+  --surface2:#2E3033;
+  --surface3:#3A3D40;
+  --line:rgba(255,255,255,0.09);
+  --line-strong:rgba(255,255,255,0.17);
+  --text:#EAEBEC;
+  --muted:#A2A6A9;
+  --muted2:#74787B;
+  --accent:#35C77A;
   --accent-dim:#1F8A52;
   --gold:#E0A180;
   --danger:#E8635E;
@@ -37,29 +37,29 @@ if(typeof XLSX === 'undefined'){
 }
 /* ---- tema chiaro ---- */
 body.light{
-  --bg:#FDF2EA;
-  --sidebar:#FFFBF8;
+  --bg:#FAF1E9;
+  --sidebar:#FFFFFF;
   --surface:#FFFFFF;
-  --surface2:#FBEDE3;
-  --surface3:#F4DFD1;
-  --line:rgba(90,50,30,0.12);
-  --line-strong:rgba(90,50,30,0.20);
-  --text:#3B2A22;
-  --muted:#7A5B47;
-  --muted2:#A8907F;
+  --surface2:#F4F2F0;
+  --surface3:#E8E5E2;
+  --line:rgba(60,45,35,0.12);
+  --line-strong:rgba(60,45,35,0.20);
+  --text:#252220;
+  --muted:#5F5954;
+  --muted2:#8E8781;
   --accent:#127A52;
   --accent-dim:#0D5C3D;
-  --gold:#A96A16;
+  --gold:#A9700F;
   --danger:#BE3B2B;
 }
-body.light .tag.role-P{background:#FBEBCF;color:#8A6410;}
-body.light .tag.role-D{background:#D9F0E3;color:#12734A;}
-body.light .tag.role-C{background:#DCEAF6;color:#15628F;}
-body.light .tag.role-A{background:#FADCD6;color:#A4382A;}
-body.light .tag.role-V{background:#EADCF7;color:#6B3FA0;}
-body.light .status-btn.presoaltri{background:#FADCD6;color:#A4382A;}
-body.light button.icon-btn:hover{background:#FADCD6;}
-body.light .consigliato-chip button:hover{color:#A4382A;}
+body.light .tag.role-P{background:#FAEFD2;color:#7E5B0D;}
+body.light .tag.role-D{background:#DCF0E4;color:#116546;}
+body.light .tag.role-C{background:#DEEAF6;color:#155A85;}
+body.light .tag.role-A{background:#F8DFDA;color:#9B3628;}
+body.light .tag.role-V{background:#E9E1F6;color:#653C97;}
+body.light .status-btn.presoaltri{background:#F8DFDA;color:#9B3628;}
+body.light button.icon-btn:hover{background:#F8DFDA;}
+body.light .consigliato-chip button:hover{color:#9B3628;}
 body.light .toast{box-shadow:0 10px 30px rgba(0,0,0,.18);}
 body.light .combo-list{box-shadow:0 12px 28px rgba(0,0,0,.16);}
 body.light button.btn{color:#FFFFFF;}
@@ -122,7 +122,7 @@ nav button.active .dot{background:var(--accent);}
 #chat-widget{position:fixed;right:22px;bottom:22px;z-index:1500;display:flex;flex-direction:column;align-items:flex-end;gap:10px;}
 .chat-launcher{
   position:relative;width:52px;height:52px;border-radius:50%;border:1px solid var(--line-strong);
-  background:var(--accent);color:#0A1F14;cursor:pointer;font-size:22px;line-height:1;
+  background:var(--accent);color:#08160E;cursor:pointer;font-size:22px;line-height:1;
   box-shadow:0 6px 20px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;
   transition:transform .12s;
 }
@@ -227,7 +227,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent-dim);}
 button.btn{
   appearance:none;border:none;border-radius:7px;padding:10px 18px;
   font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;cursor:pointer;
-  background:var(--accent);color:#0A1F14;transition:filter .15s,transform .1s;
+  background:var(--accent);color:#08160E;transition:filter .15s,transform .1s;
 }
 button.btn:hover{filter:brightness(1.1);}
 button.btn:active{transform:scale(.98);}
@@ -238,7 +238,7 @@ button.icon-btn{
   appearance:none;border:none;background:var(--surface2);color:var(--danger);
   width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;
 }
-button.icon-btn:hover{background:#362724;}
+button.icon-btn:hover{background:#3B2A28;}
 .row-action{
   appearance:none;border:none;background:none;color:var(--accent);cursor:pointer;
   font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;padding:2px 6px;
@@ -275,18 +275,18 @@ tbody td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap
 tbody tr:hover{background:var(--surface2);}
 tbody tr:last-child td{border-bottom:none;}
 .tag{display:inline-block;padding:2px 7px;border-radius:5px;font-size:10.5px;font-weight:700;font-family:'JetBrains Mono',monospace;}
-.tag.role-P{background:#3A2E1A;color:#E2B872;}
-.tag.role-D{background:#16302A;color:#5ECFA0;}
-.tag.role-C{background:#182B38;color:#6FBBE8;}
-.tag.role-A{background:#3A211C;color:#EF9A88;}
-.tag.role-V{background:#2A1C3A;color:#BE96EF;}
+.tag.role-P{background:#3A3218;color:#E2B872;}
+.tag.role-D{background:#1B3229;color:#5ECFA0;}
+.tag.role-C{background:#1C2E3B;color:#6FBBE8;}
+.tag.role-A{background:#3B2321;color:#EF9A88;}
+.tag.role-V{background:#2E2340;color:#BE96EF;}
 .tag.mantra{margin-right:3px;font-weight:700;}
 .status-libero{color:var(--muted2);}
 .status-acquistato{color:var(--accent);font-weight:600;}
 .status-btn{appearance:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;
   padding:3px 9px;border-radius:5px;background:var(--surface3);color:var(--muted2);text-transform:uppercase;letter-spacing:.03em;}
 .status-btn:hover{filter:brightness(1.25);}
-.status-btn.presoaltri{background:#3A211C;color:#EF9A88;}
+.status-btn.presoaltri{background:#3B2321;color:#EF9A88;}
 .status-mio{color:var(--accent);font-weight:700;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
 .pref-star{cursor:pointer;font-size:15px;background:none;border:none;color:var(--muted2);}
 .pref-star.active{color:var(--gold);}
@@ -309,7 +309,7 @@ thead th[data-sort]{user-select:none;}
 thead th.sorted{color:var(--accent);}
 .sort-mark{margin-left:3px;font-size:10px;font-weight:700;white-space:nowrap;}
 .sort-rank{display:inline-block;min-width:12px;height:12px;line-height:12px;text-align:center;
-  background:var(--accent);color:#0A1F14;border-radius:3px;font-size:8.5px;margin-left:2px;}
+  background:var(--accent);color:#08160E;border-radius:3px;font-size:8.5px;margin-left:2px;}
 
 /* ---------- import listone ---------- */
 .import-box{
