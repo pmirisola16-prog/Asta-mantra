@@ -2582,12 +2582,23 @@ function renderConsigliati(){
 
 // ---------------- FORMAZIONE ----------------
 function groupBucket(slot){
-  const r = slot.roles[0]; // ruolo canonico dello slot
-  if(r === 'Por') return 0;
-  if(['Dc','Dd','Ds','B'].includes(r)) return 1;
-  if(['M','C','E'].includes(r)) return 2;
+  // La riga in cui disegnare lo slot dipende innanzitutto dalla sua etichetta (Attaccante,
+  // Trequartista, ecc.), non dal primo ruolo della lista: uno slot "Attaccante" con ruoli
+  // ["W","A"] o ["T","A","Pc"] resta comunque un attaccante e va nella riga d'attacco, anche
+  // se il primo ruolo elencato è W o T (usato solo come priorità di eleggibilità, non come
+  // indicazione di reparto). Senza questo controllo, quello slot finiva nella riga dei
+  // trequartisti/ali solo perché W o T comparivano per primi nell'array dei ruoli.
+  const label = String(slot.label||'');
+  if(label.startsWith('Portiere')) return 0;
+  if(label.startsWith('Difensore')) return 1;
+  if(label.startsWith('Trequartista')) return 3;
+  if(label.startsWith('Attaccante')) return 4;
+  // "Centrocampista": può essere un vero centrocampista (riga 2) oppure, nei moduli che non
+  // hanno un'etichetta "Trequartista" dedicata, lo slot che rappresenta il trequartista/ala
+  // isolato dietro le punte (riga 3) — in quel caso il primo ruolo è T o W.
+  const r = slot.roles[0];
   if(['T','W'].includes(r)) return 3;
-  return 4; // A, Pc
+  return 2; // M, C, E
 }
 function computeFormazione(){
   const slots = MODULI[modulo];
