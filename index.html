@@ -261,6 +261,10 @@ button.icon-btn:hover{background:#3B2A28;}
 }
 .consigliato-chip button:hover{color:#F09A8E;}
 .consigliato-chip .cc-nome{display:flex;align-items:center;gap:3px;min-width:0;flex-wrap:wrap;}
+.consigliato-chip .cc-bid{flex:0 0 auto;font-size:10.5px;color:var(--muted2);white-space:nowrap;margin-left:auto;}
+.consigliato-chip .cc-bid.off{opacity:.5;}
+.consigliato-chip .cc-bid b.bid-ok{color:var(--gold);font-weight:700;}
+.consigliato-chip .cc-bid b.bid-neg{color:var(--danger);font-weight:700;}
 .consigliato-chip .tag.mantra{font-size:9.5px;padding:1px 5px;margin:0;}
 
 /* ---------- table ---------- */
@@ -623,6 +627,7 @@ thead th.sorted{color:var(--accent);}
       <div class="card"><div class="k">Portieri presi</div><div class="v" id="c-por">—</div></div>
       <div class="card"><div class="k">Movimento presi</div><div class="v" id="c-mov">—</div></div>
       <div class="card"><div class="k">Budget medio / slot</div><div class="v gold" id="c-avg">—</div></div>
+      <div class="card"><div class="k" title="Somma degli scarti fra quanto hai pagato e i prezzi di riferimento del tuo piano">Surplus totale</div><div class="v" id="c-surplus">—</div></div>
     </div>
 
     <div class="row" style="margin-bottom:18px;align-items:flex-start;">
@@ -642,10 +647,11 @@ thead th.sorted{color:var(--accent);}
 
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Ruolo<br>Mantra</th><th>Nome</th><th>Squadra</th><th>Qt.A<br>Mantra</th><th>Prezzo<br>pagato</th><th></th></tr></thead>
+        <thead><tr><th>Ruolo<br>Mantra</th><th>Nome</th><th>Squadra</th><th>Qt.A<br>Mantra</th><th>Prezzo<br>pagato</th><th title="Prezzo pagato meno il prezzo di riferimento del piano per quel ruolo e quella fascia">Surplus<br>vs piano</th><th></th></tr></thead>
         <tbody id="rosa-body"></tbody>
       </table>
     </div>
+    <p class="footer-note">Il <b>surplus</b> confronta quanto hai pagato con il prezzo che hai messo tu nel Budget per quel ruolo e per la fascia in cui hai classificato il giocatore nel Listone: rosso se hai speso più del riferimento, verde se hai risparmiato. Chi non ha una fascia assegnata lo conto prudenzialmente in 2ª, come già fa il piano. La card <b>Surplus totale</b> somma tutto: è il termometro dell'asta, dice se stai pagando sopra o sotto il tuo stesso piano.</p>
   </section>
 
   <!-- BUDGET -->
@@ -715,7 +721,8 @@ thead th.sorted{color:var(--accent);}
           <tbody id="consigliati-body"></tbody>
         </table>
       </div>
-      <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.</p>
+      <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.<br>
+      <b>rif</b> = il prezzo che hai messo tu nel piano per quel ruolo e quella fascia: è il metro su cui verrà misurato il surplus quando lo compri. <b>max</b> = <i>rif + margine</i>, cioè fin dove puoi spingerti su quel singolo giocatore continuando a poterti permettere tutti gli slot che restano. Se una fascia non ha più slot da riempire nel piano, il tetto è spento perché non avrebbe significato: pagare lì vuol dire togliere crediti a un altro reparto.</p>
       </div>
     </details>
   </section>
@@ -2011,7 +2018,8 @@ function renderListone(){
       const patch = { fascia:v, fasciaManuale: v !== null };
       if(v !== null) patch.pref = true; // assegnare una fascia è già una scelta: lo segna come preferito
       setPref(el.dataset.nome, patch);
-      renderListone(); renderBudget();
+      // la Rosa mostra il surplus, che dipende dalla fascia assegnata: va ridisegnata anche lei
+      renderListone(); renderBudget(); renderRosa();
     });
   });
   tbody.querySelectorAll('.note-input').forEach(el=>{
@@ -2139,6 +2147,20 @@ function showToast(text, kind){
 }
 
 // ---------------- ROSA ----------------
+// Surplus di un acquisto: quanto hai pagato meno il prezzo che TU hai messo nel piano per quel
+// ruolo e per la fascia in cui hai classificato il giocatore. Se hai messo Lautaro in 1ª e la
+// Pc di 1ª fascia vale 300, pagarlo 325 fa +25. Se un giocatore da 1ª lo hai messo in 3ª, il
+// confronto è con il prezzo della 3ª: è il tuo piano il metro, non il valore teorico.
+// Senza fascia assegnata conta 2ª, la stessa regola prudenziale già usata da giaPresiPerRuolo().
+function surplusDiAcquisto(voce, p){
+  const r = primaryRole(p);
+  const costo = fasceCosti[r];
+  if(!costo) return null;
+  const f = getPref(p.nome).fascia || 2;
+  const rif = Number(costo[f]) || 0;
+  return { f, rif, delta: Math.round((Number(voce.prezzo)||0) - rif) };
+}
+
 function renderRosa(){
   ensureCoreState();
   const speso = rosa.reduce((s,x)=>s+(Number(x.prezzo)||0),0);
@@ -2159,19 +2181,30 @@ function renderRosa(){
   document.getElementById('c-mov').textContent = movPresi + ' / ' + settings.nMovimento;
   document.getElementById('c-avg').textContent = slotRimanenti>0 ? avg.toFixed(1) : '—';
 
+  let surplusTot = 0;
   const tbody = document.getElementById('rosa-body');
   tbody.innerHTML = rosa.map((x,i)=>{
     const p = byNome[x.nome];
-    if(!p) return `<tr><td colspan="6" style="color:var(--danger);">${escHtml(x.nome)} non trovato nel listone attivo <button class="icon-btn" data-i="${i}">✕</button></td></tr>`;
+    if(!p) return `<tr><td colspan="7" style="color:var(--danger);">${escHtml(x.nome)} non trovato nel listone attivo <button class="icon-btn" data-i="${i}">✕</button></td></tr>`;
+    const s = surplusDiAcquisto(x, p);
+    if(s) surplusTot += s.delta;
+    const surplusCell = s
+      ? `<td class="mono" style="color:${s.delta > 0 ? 'var(--danger)' : (s.delta < 0 ? 'var(--accent)' : 'var(--muted2)')};font-weight:${s.delta===0?'400':'700'};" title="${s.f}ª fascia · riferimento di piano ${s.rif} cr">${s.delta > 0 ? '+' : ''}${s.delta}</td>`
+      : `<td class="mono" style="color:var(--muted2);" title="Nessun prezzo di riferimento per questo ruolo">—</td>`;
     return `<tr>
       <td>${String(p.rm||'').split(';').map(x=>x.trim()).filter(Boolean).map(mantraTag).join('')}</td>
       <td>${escHtml(p.nome)}</td>
       <td>${escHtml(p.sq)}</td>
       <td class="mono">${p.qtam}</td>
       <td class="mono">${x.prezzo}</td>
+      ${surplusCell}
       <td><button class="icon-btn" data-i="${i}" title="Rimuovi">✕</button></td>
     </tr>`;
   }).join('');
+
+  const surplusEl = document.getElementById('c-surplus');
+  surplusEl.textContent = rosa.length ? ((surplusTot > 0 ? '+' : '') + Math.round(surplusTot) + ' cr') : '—';
+  surplusEl.className = 'v ' + (surplusTot > 0 ? 'danger' : (surplusTot < 0 ? 'accent' : ''));
   tbody.querySelectorAll('.icon-btn').forEach(el=>{
     el.addEventListener('click', async ()=>{
       rosa.splice(Number(el.dataset.i),1);
@@ -2236,7 +2269,7 @@ function renderRefCostTable(){
       if(!fasceCosti[r]) fasceCosti[r] = {1:0,2:0,3:0};
       fasceCosti[r][f] = Math.max(0, Number(el.value)||0);
       await saveFasceCosti();
-      renderBudget();
+      renderBudget(); renderRosa();
     });
   });
   tbody.querySelectorAll('.prio-role-input').forEach(el=>{
@@ -2376,7 +2409,7 @@ document.getElementById('btn-prezzi-mercato').addEventListener('click', async ()
   if(!(await customConfirm('Riportare i prezzi per fascia ai valori di mercato osservati nella lega, riscalati su ' + b + ' crediti? Le modifiche manuali che hai fatto ai prezzi andranno perse.'))) return;
   fasceCosti = prezziPerBudget(b);
   await saveFasceCosti();
-  renderBudget();
+  renderBudget(); renderRosa();
   const note = document.getElementById('prezzi-mercato-note');
   const orig = note.textContent;
   note.style.color = 'var(--accent)';
@@ -2416,7 +2449,7 @@ function computeBudget(){
     const costoResiduo = rim1*(Number(costo[1])||0) + rim2*(Number(costo[2])||0) + rim3*(Number(costo[3])||0);
     if(r === 'Por') totPorPianificato += totalePiano; else totMovPianificato += totalePiano;
     costoResiduoTotale += costoResiduo;
-    return { r, p1,p2,p3, totalePiano, giaTotale, rimTotale, costoResiduo, obiettivo: totaliObiettivo[r]||0, obiettivoTitolari: titolariObiettivo[r]||0, slotCompat: slotCompat[r]||0 };
+    return { r, p1,p2,p3, totalePiano, giaTotale, rimTotale, rim1, rim2, rim3, costoResiduo, obiettivo: totaliObiettivo[r]||0, obiettivoTitolari: titolariObiettivo[r]||0, slotCompat: slotCompat[r]||0 };
   });
 
   const margine = saldo - costoResiduoTotale;
@@ -2551,17 +2584,31 @@ document.getElementById('btn-genera-consigliati').addEventListener('click', gene
 
 function renderConsigliati(){
   const autoFasce = computeAutoFasce();
+  // Il tetto d'offerta si appoggia al margine del piano: quanto avanza dopo aver messo da parte
+  // i crediti per tutti gli slot ancora da riempire. Su un singolo giocatore puoi arrivare
+  // al margine PIÙ il prezzo che il piano aveva già stanziato per quello slot.
+  const b = computeBudget();
+  const rimPerFascia = {};
+  b.rows.forEach(row=>{ rimPerFascia[row.r] = {1:row.rim1, 2:row.rim2, 3:row.rim3}; });
   const tbody = document.getElementById('consigliati-body');
   tbody.innerHTML = ROLES_GRAN.map(r=>{
     const candidates = PLAYERS.filter(p => primaryRole(p) === r && getPref(p.nome).pref && !isTaken(p.nome));
     const cell = f => {
       const list = candidates.filter(p => effectiveFascia(p, autoFasce) === f).sort((a,b)=> suggestScore(b)-suggestScore(a));
       if(list.length === 0) return '<span style="color:var(--muted2);">—</span>';
+      const rif = Number((fasceCosti[r]||{})[f]) || 0;
+      const maxBid = Math.round(b.margine + rif);
+      const senzaSlot = ((rimPerFascia[r]||{})[f] || 0) === 0;
+      // Senza slot residui pianificati in questa fascia il tetto non vuol dire niente: mostro solo
+      // il riferimento, spento, invece di un numero che inviterebbe a comprare uno slot inesistente.
+      const bidHtml = senzaSlot
+        ? `<span class="cc-bid mono off" title="Il piano non prevede più slot di ${f}ª fascia per ${ROLE_LABELS[r]}: qui il tetto non ha significato">rif ${rif}</span>`
+        : `<span class="cc-bid mono" title="Riferimento di piano ${rif} cr + margine ${Math.round(b.margine)} cr">rif ${rif} · max <b class="${b.margine < 0 ? 'bid-neg' : 'bid-ok'}">${maxBid}</b></span>`;
       return list.map(p => {
         const ruoli = String(p.rm||'').split(';').map(x=>x.trim()).filter(Boolean);
         const tagsRuoli = ruoli.map(mantraTag).join('');
         const doppio = ruoli.length > 1 ? ' consigliato-doppio' : '';
-        return `<div class="consigliato-chip${doppio}"><span class="cc-nome">${tagsRuoli} ${escHtml(p.nome)} <span class="mono" style="color:var(--muted2);font-size:11px;">${p.qtam}${p.fm!=null?' · fm '+p.fm:''}</span></span><button data-nome="${escAttr(p.nome)}" title="Rimuovi dai preferiti">×</button></div>`;
+        return `<div class="consigliato-chip${doppio}"><span class="cc-nome">${tagsRuoli} ${escHtml(p.nome)} <span class="mono" style="color:var(--muted2);font-size:11px;">${p.qtam}${p.fm!=null?' · fm '+p.fm:''}</span></span>${bidHtml}<button data-nome="${escAttr(p.nome)}" title="Rimuovi dai preferiti">×</button></div>`;
       }).join('');
     };
     return `<tr>
