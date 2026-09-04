@@ -311,6 +311,17 @@ input.note-input{width:120px;padding:4px 6px;font-size:12px;}
   border-radius:999px;padding:7px 14px;cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none;
 }
 .chip-toggle.active{color:var(--gold);border-color:var(--gold);}
+/* filtri della lista consigliati: su quali reparti/ruoli rigenerare e guardare */
+.cons-filtri{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.cons-filtro-riga{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+.cons-filtro-label{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted2);
+  font-weight:700;min-width:126px;}
+.cons-chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chip-sel{display:inline-block;border-radius:999px;padding:4px 11px;cursor:pointer;user-select:none;
+  font-size:11.5px;font-weight:700;font-family:'JetBrains Mono',monospace;
+  background:var(--surface2);border:1px solid var(--line);color:var(--muted2);}
+.chip-sel:hover{border-color:var(--line-strong);color:var(--text);}
+.chip-sel.on{background:var(--accent);border-color:var(--accent);color:var(--bg);}
 .count-badge{color:var(--muted2);font-size:12px;margin-left:auto;}
 /* intestazioni ordinabili: freccia di direzione e numero di priorità se gli ordinamenti sono più d'uno */
 thead th[data-sort]{user-select:none;}
@@ -375,6 +386,8 @@ thead th.sorted{color:var(--accent);}
 .token .name{font-size:10.5px;font-weight:700;margin-top:4px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;}
 .token .meta{font-size:9px;color:rgba(255,255,255,.75);text-shadow:0 1px 3px rgba(0,0,0,.6);font-family:'JetBrains Mono',monospace;}
+.token .meta .ruolo-on{color:#fff;font-weight:700;}
+.token .meta .ruolo-off{color:rgba(255,255,255,.5);font-weight:500;}
 .token.empty .name{color:rgba(255,255,255,.85);font-weight:700;}
 .token.empty .meta{color:rgba(255,255,255,.4);}
 .pitch-summary{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px 0;flex-wrap:wrap;gap:10px;}
@@ -711,9 +724,21 @@ thead th.sorted{color:var(--accent);}
         <span class="acc-arrow">▾</span>
       </summary>
       <div class="acc-body">
-      <div class="row" style="margin-bottom:16px;">
-        <button class="btn" id="btn-genera-consigliati">🎯 Genera consigliati</button>
+      <div class="cons-filtri">
+        <div class="cons-filtro-riga">
+          <span class="cons-filtro-label" title="Reparto classico del listone (P/D/C/A), letto dal ruolo classic del giocatore">Macroruolo classic</span>
+          <div class="cons-chips" id="cons-macro-chips"></div>
+        </div>
+        <div class="cons-filtro-riga">
+          <span class="cons-filtro-label" title="Righe della tabella, cioè i ruoli Mantra su cui rigenerare">Ruolo Mantra</span>
+          <div class="cons-chips" id="cons-ruolo-chips"></div>
+        </div>
       </div>
+      <div class="row" style="margin-bottom:10px;">
+        <button class="btn" id="btn-genera-consigliati">🎯 Genera consigliati</button>
+        <button class="btn ghost" id="btn-cons-tutti">↺ Tutti i ruoli</button>
+      </div>
+      <p class="footer-note" id="cons-filtro-note" style="margin-bottom:16px;">&nbsp;</p>
       <div class="cards" id="consigliati-cards" style="margin-bottom:16px;"></div>
       <div class="table-wrap" style="max-height:none;">
         <table>
@@ -722,6 +747,7 @@ thead th.sorted{color:var(--accent);}
         </table>
       </div>
       <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.<br>
+      I due filtri qui sopra lavorano insieme: il <b>macroruolo classic</b> guarda il ruolo classic del giocatore (quindi un esterno classic D resta tra i difensori e uno classic C tra i centrocampisti), il <b>ruolo Mantra</b> sceglie le righe. Il filtro vale sia per la tabella sia per il ricalcolo, non viene salvato e non arriva al tuo socio.<br>
       <b>rif</b> = il prezzo che hai messo tu nel piano per quel ruolo e quella fascia. È il metro del surplus: paghi sopra il rif e vai in rosso, paghi sotto e risparmi. Quando una fascia non ha più slot da riempire il rif è spento a metà, perché prendere un giocatore lì significa togliere crediti a un altro reparto. Il <b>Surplus totale</b> qui sopra è lo stesso della Rosa, e il <b>Margine</b> dice se il piano sta ancora dentro il budget: se è rosso, i prezzi che hai impostato costano più di quanto hai in cassa.</p>
       </div>
     </details>
@@ -1149,13 +1175,26 @@ async function initFirebaseApp(auto){
 // anche se il browser viene chiuso di colpo o cade la rete, non solo cliccando "Esci".
 let fbPresenceRef = null;
 let fbSessionId = null;
+let fbPresenceTimer = null;
+let fbPresenceVisibility = null;
+// Ogni dispositivo riscrive la propria presenza a intervalli regolari. Un nodo che non si fa
+// sentire da più di due giri e mezzo lo consideriamo morto anche se Firebase non è riuscito a
+// cancellarlo: meglio una lista che si aggiorna da sola che una lista che mente.
+const PRESENCE_BATTITO_MS = 45000;
+const PRESENCE_SCADUTA_MS = 150000;
 
 function renderPresence(list){
   const box = document.getElementById('presence-box');
   const el = document.getElementById('presence-list');
   if(!fbConnected){ box.style.display = 'none'; return; }
   box.style.display = '';
-  const entries = Object.entries(list || {});
+  const ora = Date.now();
+  const entries = Object.entries(list || {}).filter(([id, info])=>{
+    if(id === fbSessionId) return true;                       // se sono connesso, ci sono
+    const visto = Number((info||{}).visto || (info||{}).da || 0);
+    if(!visto) return true;                                   // dato vecchio senza battito: lo tengo
+    return (ora - visto) < PRESENCE_SCADUTA_MS;
+  });
   if(entries.length === 0){
     el.innerHTML = '<div class="presence-empty">nessuno</div>';
     return;
@@ -1177,40 +1216,54 @@ async function startPresence(){
     const uid = (fbUser && fbUser.uid) ? fbUser.uid : ('anon-' + Math.random().toString(36).slice(2,9));
     fbSessionId = uid;
     fbPresenceRef = fbDb.ref('rooms/' + fbRoom + '/presence/' + uid);
-    const info = {
-      email: (fbUser && fbUser.email) ? fbUser.email : 'utente',
-      da: Date.now()
+    const email = (fbUser && fbUser.email) ? fbUser.email : 'utente';
+    const daQuando = Date.now();
+
+    // Riscrive la presenza e ri-arma la cancellazione automatica. Va rifatto spesso, non una
+    // volta sola: onDisconnect è una prenotazione che si consuma quando scatta, e il server
+    // può considerare caduto un client che si crede ancora connesso (connessione mezza aperta,
+    // portatile che si sospende, wi-fi che cambia rete). In quel caso il nodo sparisce dal
+    // database senza che il browser se ne accorga, e la lista mostra "nessuno" mentre sei lì.
+    const scriviPresenza = async ()=>{
+      if(!fbPresenceRef) return;
+      try{
+        if(typeof fbPresenceRef.onDisconnect === 'function'){
+          await fbPresenceRef.onDisconnect().remove();
+        }
+        await fbPresenceRef.set({ email, da: daQuando, visto: Date.now() });
+      }catch(e){ console.warn('Presenza non riscritta:', e); }
     };
 
-    // IMPORTANTE: non basta scrivere la presenza una volta sola. Firebase esegue la rimozione
-    // programmata (onDisconnect) ad ogni interruzione anche brevissima della connessione; se
-    // nessuno riscrive il dato, l'utente sparisce dalla lista pur restando collegato.
-    // Ci si aggancia quindi a ".info/connected", che diventa true ad ogni (ri)connessione:
-    // ogni volta ri-registriamo la rimozione automatica e riscriviamo la presenza.
+    // .info/connected diventa true a ogni (ri)connessione: è il momento giusto per riscrivere.
     const connectedRef = fbDb.ref('.info/connected');
     if(connectedRef && typeof connectedRef.on === 'function'){
-      connectedRef.on('value', async snap=>{
-        if(snap.val() !== true) return;
-        try{
-          if(typeof fbPresenceRef.onDisconnect === 'function'){
-            await fbPresenceRef.onDisconnect().remove();
-          }
-          await fbPresenceRef.set({ ...info, da: Date.now() });
-        }catch(e){ console.warn('Ri-registrazione presenza non riuscita:', e); }
-      });
+      connectedRef.off();   // evita ascoltatori doppi se si rientra in una stanza
+      connectedRef.on('value', snap=>{ if(snap.val() === true) scriviPresenza(); });
     } else {
-      // fallback per ambienti che non espongono .info/connected
-      if(typeof fbPresenceRef.onDisconnect === 'function'){ fbPresenceRef.onDisconnect().remove(); }
-      await fbPresenceRef.set(info);
+      await scriviPresenza();   // fallback per ambienti senza .info/connected
     }
 
-    fbDb.ref('rooms/' + fbRoom + '/presence').on('value', snap=>{
-      renderPresence(snap.val());
-    });
+    // Battito regolare: copre i casi in cui .info/connected non torna mai a true perché il
+    // client non si è mai accorto di essere caduto.
+    if(fbPresenceTimer) clearInterval(fbPresenceTimer);
+    fbPresenceTimer = setInterval(scriviPresenza, PRESENCE_BATTITO_MS);
+
+    // Ritorno sulla scheda dopo che il computer è stato fermo: riscrivo subito, senza
+    // aspettare il battito successivo.
+    if(fbPresenceVisibility) document.removeEventListener('visibilitychange', fbPresenceVisibility);
+    fbPresenceVisibility = ()=>{ if(document.visibilityState === 'visible') scriviPresenza(); };
+    document.addEventListener('visibilitychange', fbPresenceVisibility);
+
+    fbDb.ref('rooms/' + fbRoom + '/presence').on('value',
+      snap=>{ renderPresence(snap.val()); },
+      err=>{ console.warn('Ascolto presenza interrotto:', err); }
+    );
   }catch(e){ console.warn('Presenza non disponibile:', e); }
 }
 
 async function stopPresence(){
+  if(fbPresenceTimer){ clearInterval(fbPresenceTimer); fbPresenceTimer = null; }
+  if(fbPresenceVisibility){ document.removeEventListener('visibilitychange', fbPresenceVisibility); fbPresenceVisibility = null; }
   try{
     if(fbDb) fbDb.ref('.info/connected').off();
     if(fbDb && fbRoom) fbDb.ref('rooms/' + fbRoom + '/presence').off();
@@ -2233,6 +2286,31 @@ const ROLE_LABELS = {
 
 function primaryRole(p){ return String(p.rm||'').split(';').filter(Boolean)[0] || p.r; }
 
+// Macroruoli "classic" del listone (P/D/C/A). Li tengo separati dai ruoli Mantra e li leggo dal
+// campo `r` del giocatore, non dal suo ruolo Mantra: in Mantra un esterno può essere classic D
+// (Dimarco) o classic C (Saelemaekers), quindi un raggruppamento fatto a tavolino sbaglierebbe.
+// In asta i giocatori si chiamano per reparto classico, ed è così che si filtra qui.
+const MACRO_ORDER = ['P','D','C','A'];
+const MACRO_LABELS = { P:'Portieri', D:'Difensori', C:'Centrocampisti', A:'Attaccanti' };
+// Su quali righe lavorare nella lista consigliati. Solo in memoria: è un filtro di lavoro
+// durante l'asta, non un'impostazione da salvare o sincronizzare con il socio.
+let consRuoli = new Set(ROLES_GRAN);
+let consMacro = new Set(MACRO_ORDER);
+function consRuoliAttivi(){ return ROLES_GRAN.filter(r => consRuoli.has(r)); }
+function consMacroOk(p){
+  const m = String(p.r||'').toUpperCase();
+  return MACRO_LABELS[m] ? consMacro.has(m) : true; // ruolo classic sconosciuto: non lo escludo
+}
+// Un clic isola il ruolo su cui stai lavorando (utile quando la lega sta facendo i Dc), i clic
+// successivi aggiungono o tolgono, e togliendo l'ultimo rimasto si torna a tutti.
+function toggleFiltro(set, tutti, valore){
+  if(set.size === tutti.length){ set.clear(); set.add(valore); return; }
+  if(set.has(valore)){
+    set.delete(valore);
+    if(set.size === 0) tutti.forEach(v=> set.add(v));
+  } else set.add(valore);
+}
+
 function renderModuloHint(){
   const slots = MODULI[modulo] || [];
   const { assegnazioni } = computeTotaliPerRuolo();
@@ -2451,7 +2529,17 @@ function computeBudget(){
     const totalePiano = p1+p2+p3;
     const g1 = gia[r][1]||0, g2 = gia[r][2]||0, g3 = gia[r][3]||0;
     const giaTotale = g1+g2+g3;
-    const rim1 = Math.max(p1-g1,0), rim2 = Math.max(p2-g2,0), rim3 = Math.max(p3-g3,0);
+    // Un giocatore già comprato occupa uno slot del suo ruolo anche se la fascia in cui l'hai
+    // classificato non è quella che il piano prevedeva. Contando i mancanti fascia per fascia,
+    // 3 portieri presi contro un piano 1+1+1 lasciavano "ancora da prendere 2", perché
+    // l'eccedenza di una fascia non compensava il buco nelle altre. Qui il totale mancante è
+    // sempre totalePiano − giàPresi: l'eccedenza cancella i buchi partendo dalle fasce più
+    // economiche (3 → 2 → 1), così il costo residuo resta prudente e tiene in piedi gli slot
+    // più cari ancora scoperti.
+    const rem = { 1: Math.max(p1-g1,0), 2: Math.max(p2-g2,0), 3: Math.max(p3-g3,0) };
+    let eccedenza = Math.max(g1-p1,0) + Math.max(g2-p2,0) + Math.max(g3-p3,0);
+    [3,2,1].forEach(f=>{ const taglio = Math.min(eccedenza, rem[f]); rem[f] -= taglio; eccedenza -= taglio; });
+    const rim1 = rem[1], rim2 = rem[2], rim3 = rem[3];
     const rimTotale = rim1+rim2+rim3;
     const costo = (fasceCosti[r]||{1:0,2:0,3:0});
     const costoResiduo = rim1*(Number(costo[1])||0) + rim2*(Number(costo[2])||0) + rim3*(Number(costo[3])||0);
@@ -2556,8 +2644,10 @@ function effectiveFascia(p, autoFasce){
 const MIN_CONSIGLIATI_PER_FASCIA = 5;
 function generaConsigliati(){
   const { titolari, totale } = computeTotaliPerRuolo();
-  ROLES_GRAN.forEach(r=>{
-    const candidates = PLAYERS.filter(p => primaryRole(p) === r && !isTaken(p.nome));
+  // Rigenero solo i ruoli selezionati: durante l'asta di un reparto non ha senso rimescolare
+  // le fasce di tutti gli altri, che magari hai già sistemato a mano.
+  consRuoliAttivi().forEach(r=>{
+    const candidates = PLAYERS.filter(p => primaryRole(p) === r && consMacroOk(p) && !isTaken(p.nome));
     const tit = titolari[r] || 0, tot = totale[r] || 0, bench = Math.max(tot - tit, 0);
     const target2 = Math.ceil(bench * 0.4);
     const target = {
@@ -2589,6 +2679,45 @@ function generaConsigliati(){
   renderConsigliati(); renderListone();
 }
 document.getElementById('btn-genera-consigliati').addEventListener('click', generaConsigliati);
+document.getElementById('btn-cons-tutti').addEventListener('click', ()=>{
+  consRuoli = new Set(ROLES_GRAN); consMacro = new Set(MACRO_ORDER);
+  renderConsigliati();
+});
+
+// Descrizione compatta del filtro attivo, riusata sul bottone e nella nota.
+function filtroConsAttivo(){ return consMacro.size < MACRO_ORDER.length || consRuoli.size < ROLES_GRAN.length; }
+function descrizioneFiltroCons(){
+  const parti = [];
+  if(consMacro.size < MACRO_ORDER.length) parti.push(MACRO_ORDER.filter(m=>consMacro.has(m)).join('/'));
+  if(consRuoli.size < ROLES_GRAN.length) parti.push(consRuoliAttivi().join(', '));
+  return parti.join(' · ');
+}
+function renderConsFiltri(){
+  const mc = document.getElementById('cons-macro-chips');
+  const rc = document.getElementById('cons-ruolo-chips');
+  if(!mc || !rc) return;
+  mc.innerHTML = MACRO_ORDER.map(m=>
+    `<span class="chip-sel${consMacro.has(m)?' on':''}" data-macro="${m}" title="${MACRO_LABELS[m]}">${m}</span>`).join('');
+  rc.innerHTML = ROLES_GRAN.map(r=>
+    `<span class="chip-sel${consRuoli.has(r)?' on':''}" data-ruolo="${r}" title="${ROLE_LABELS[r]}">${r}</span>`).join('');
+  mc.querySelectorAll('[data-macro]').forEach(el=> el.addEventListener('click', ()=>{
+    toggleFiltro(consMacro, MACRO_ORDER, el.dataset.macro); renderConsigliati();
+  }));
+  rc.querySelectorAll('[data-ruolo]').forEach(el=> el.addEventListener('click', ()=>{
+    toggleFiltro(consRuoli, ROLES_GRAN, el.dataset.ruolo); renderConsigliati();
+  }));
+
+  const btn = document.getElementById('btn-genera-consigliati');
+  const note = document.getElementById('cons-filtro-note');
+  const desc = descrizioneFiltroCons();
+  if(btn) btn.textContent = filtroConsAttivo() ? `🎯 Genera consigliati · ${desc}` : '🎯 Genera consigliati';
+  if(note){
+    note.style.color = filtroConsAttivo() ? 'var(--gold)' : '';
+    note.textContent = filtroConsAttivo()
+      ? `Filtro attivo su ${desc}: il ricalcolo tocca solo questi, la tabella qui sotto mostra solo questi. Tutto il resto resta com'è.`
+      : 'Clicca un ruolo per lavorare solo su quello: il ricalcolo e la tabella si limitano alla selezione, gli altri ruoli restano intatti.';
+  }
+}
 
 // Surplus totale e Margine ripetuti sopra la lista consigliati: la card Margine originale vive
 // dentro l'accordion "Piano rosa", che è chiuso di default, quindi in asta non la si vede mai.
@@ -2613,9 +2742,14 @@ function renderConsigliati(){
   const rimPerFascia = {};
   b.rows.forEach(row=>{ rimPerFascia[row.r] = {1:row.rim1, 2:row.rim2, 3:row.rim3}; });
   renderConsigliatiCards(b);
+  renderConsFiltri();
+  const macroRistretto = consMacro.size < MACRO_ORDER.length;
   const tbody = document.getElementById('consigliati-body');
-  tbody.innerHTML = ROLES_GRAN.map(r=>{
-    const candidates = PLAYERS.filter(p => primaryRole(p) === r && getPref(p.nome).pref && !isTaken(p.nome));
+  tbody.innerHTML = consRuoliAttivi().map(r=>{
+    const candidates = PLAYERS.filter(p => primaryRole(p) === r && consMacroOk(p) && getPref(p.nome).pref && !isTaken(p.nome));
+    // Con un filtro di reparto attivo, le righe rimaste completamente vuote sono solo rumore:
+    // quel ruolo Mantra non ha giocatori di quel macroruolo classic.
+    if(macroRistretto && candidates.length === 0) return '';
     const cell = f => {
       const list = candidates.filter(p => effectiveFascia(p, autoFasce) === f).sort((a,b)=> suggestScore(b)-suggestScore(a));
       if(list.length === 0) return '<span style="color:var(--muted2);">—</span>';
@@ -2638,6 +2772,9 @@ function renderConsigliati(){
       <td>${cell(1)}</td><td>${cell(2)}</td><td>${cell(3)}</td>
     </tr>`;
   }).join('');
+  if(!tbody.innerHTML){
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted2);">Nessun consigliato per il filtro attivo — prova a generarli o allarga la selezione.</td></tr>';
+  }
   tbody.querySelectorAll('button[data-nome]').forEach(el=>{
     el.addEventListener('click', ()=>{
       // azzera davvero: stella, fascia e blocco manuale, così il giocatore torna
@@ -2694,12 +2831,14 @@ function computeFormazione(){
   }
   return slots.map((slot,i)=>{
     const player = assigned[i];
-    let matchedRole = null;
+    let matchedRole = null, ruoli = [];
     if(player){
-      const toks = rmTokens(player);
-      matchedRole = slot.roles.find(r => toks.includes(r)) || toks[0] || null;
+      ruoli = rmTokens(player);
+      // il ruolo con cui occupa lo slot: uno solo, ma il giocatore ne ha spesso di più
+      // (Cacciamani è E;W) e vanno mostrati tutti, o sul campo sembra monoruolo.
+      matchedRole = slot.roles.find(r => ruoli.includes(r)) || ruoli[0] || null;
     }
-    return { slot, player, matchedRole };
+    return { slot, player, matchedRole, ruoli };
   });
 }
 
@@ -2739,10 +2878,15 @@ function renderFormazione(){
       if(r.player){
         totale += Number(r.player.qtam)||0;
         const surname = String(r.player.nome).split(' ').slice(-1)[0];
+        // Tutti i ruoli Mantra del giocatore, con in evidenza quello con cui occupa lo slot:
+        // così si vede a colpo d'occhio che è impiegabile anche altrove nel modulo.
+        const ruoliHtml = (r.ruoli.length ? r.ruoli : [r.matchedRole].filter(Boolean))
+          .map(x => `<span class="${x === r.matchedRole ? 'ruolo-on' : 'ruolo-off'}">${escHtml(x)}</span>`)
+          .join('<span class="ruolo-off">/</span>');
         el.className = 'token';
         el.innerHTML = `<div class="chip">${escHtml(surname.slice(0,3).toUpperCase())}</div>
           <div class="name">${escHtml(r.player.nome)}</div>
-          <div class="meta">${escHtml(r.matchedRole || '')} · ${r.player.qtam}</div>`;
+          <div class="meta">${ruoliHtml} · ${r.player.qtam}</div>`;
       } else {
         el.className = 'token empty';
         el.innerHTML = `<div class="chip">${escHtml(r.slot.roles.length>1?'?':r.slot.roles[0])}</div>
@@ -2771,7 +2915,7 @@ function renderFormazione(){
     benchListEl.innerHTML = '<div class="bench-empty">Nessuno: tutta la rosa acquistata rientra nell\'11 con questo modulo.</div>';
   } else {
     benchListEl.innerHTML = panchina.map(p => `<div class="bench-row">
-      <span class="bn"><span class="tag role-${roleColorClass(primaryRole(p))}">${escHtml(primaryRole(p))}</span> <span class="nm">${escHtml(p.nome)}</span></span>
+      <span class="bn">${String(p.rm||'').split(';').map(x=>x.trim()).filter(Boolean).map(mantraTag).join('') || mantraTag(primaryRole(p))} <span class="nm">${escHtml(p.nome)}</span></span>
       <span class="bp">${p.prezzo}</span>
     </div>`).join('');
   }
