@@ -311,17 +311,16 @@ input.note-input{width:120px;padding:4px 6px;font-size:12px;}
   border-radius:999px;padding:7px 14px;cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none;
 }
 .chip-toggle.active{color:var(--gold);border-color:var(--gold);}
-/* filtri della lista consigliati: su quali reparti/ruoli rigenerare e guardare */
-.cons-filtri{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
-.cons-filtro-riga{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
-.cons-filtro-label{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted2);
-  font-weight:700;min-width:126px;}
-.cons-chips{display:flex;gap:6px;flex-wrap:wrap;}
-.chip-sel{display:inline-block;border-radius:999px;padding:4px 11px;cursor:pointer;user-select:none;
-  font-size:11.5px;font-weight:700;font-family:'JetBrains Mono',monospace;
-  background:var(--surface2);border:1px solid var(--line);color:var(--muted2);}
-.chip-sel:hover{border-color:var(--line-strong);color:var(--text);}
-.chip-sel.on{background:var(--accent);border-color:var(--accent);color:var(--bg);}
+/* riga ruolo nella lista consigliati, con il pulsante che rigenera solo quel ruolo */
+.cons-ruolo{display:flex;align-items:center;gap:7px;}
+.cons-ruolo-nome{white-space:nowrap;}
+.cons-rigenera{
+  flex:0 0 auto;width:23px;height:23px;border-radius:6px;cursor:pointer;line-height:1;
+  background:var(--surface2);border:1px solid var(--line);color:var(--muted2);
+  font-size:13px;display:flex;align-items:center;justify-content:center;padding:0;
+}
+.cons-rigenera:hover{border-color:var(--accent);color:var(--accent);}
+.cons-rigenera:active{transform:scale(.92);}
 .count-badge{color:var(--muted2);font-size:12px;margin-left:auto;}
 /* intestazioni ordinabili: freccia di direzione e numero di priorità se gli ordinamenti sono più d'uno */
 thead th[data-sort]{user-select:none;}
@@ -577,11 +576,18 @@ thead th.sorted{color:var(--accent);}
   <!-- LISTONE -->
   <section class="panel" id="panel-listone">
     <div class="panel-head">
-      <div><h2>Listone giocatori</h2><p class="panel-desc">Segna i preferiti, assegna priorità, filtra per ruolo. Lo stato "Mio" si aggiorna da solo quando compri un giocatore; clicca su "Libero" per segnare che l'ha preso un altro fantallenatore — i giocatori presi scivolano automaticamente in fondo alla lista. Per caricare un nuovo listone o le statistiche, vai in Impostazioni.</p></div>
+      <div><h2>Listone giocatori</h2><p class="panel-desc">Segna i preferiti, assegna priorità, filtra per macroruolo classic (il reparto con cui il giocatore viene chiamato in asta) o per ruolo Mantra. Lo stato "Mio" si aggiorna da solo quando compri un giocatore; clicca su "Libero" per segnare che l'ha preso un altro fantallenatore — i giocatori presi scivolano automaticamente in fondo alla lista. Per caricare un nuovo listone o le statistiche, vai in Impostazioni.</p></div>
     </div>
 
     <div class="filters">
       <input type="search" class="search" id="f-search" placeholder="Cerca nome o squadra…">
+      <select id="f-macro" title="Reparto classico del listone: è il ruolo con cui il giocatore viene chiamato in asta">
+        <option value="">Tutti i macroruoli</option>
+        <option value="P">P — Portieri</option>
+        <option value="D">D — Difensori</option>
+        <option value="C">C — Centrocampisti</option>
+        <option value="A">A — Attaccanti</option>
+      </select>
       <select id="f-ruolo">
         <option value="">Tutti i ruoli</option>
         <option value="Por">Por — Portiere</option>
@@ -724,21 +730,9 @@ thead th.sorted{color:var(--accent);}
         <span class="acc-arrow">▾</span>
       </summary>
       <div class="acc-body">
-      <div class="cons-filtri">
-        <div class="cons-filtro-riga">
-          <span class="cons-filtro-label" title="Reparto classico del listone (P/D/C/A), letto dal ruolo classic del giocatore">Macroruolo classic</span>
-          <div class="cons-chips" id="cons-macro-chips"></div>
-        </div>
-        <div class="cons-filtro-riga">
-          <span class="cons-filtro-label" title="Righe della tabella, cioè i ruoli Mantra su cui rigenerare">Ruolo Mantra</span>
-          <div class="cons-chips" id="cons-ruolo-chips"></div>
-        </div>
+      <div class="row" style="margin-bottom:16px;">
+        <button class="btn" id="btn-genera-consigliati">🎯 Genera tutti i ruoli</button>
       </div>
-      <div class="row" style="margin-bottom:10px;">
-        <button class="btn" id="btn-genera-consigliati">🎯 Genera consigliati</button>
-        <button class="btn ghost" id="btn-cons-tutti">↺ Tutti i ruoli</button>
-      </div>
-      <p class="footer-note" id="cons-filtro-note" style="margin-bottom:16px;">&nbsp;</p>
       <div class="cards" id="consigliati-cards" style="margin-bottom:16px;"></div>
       <div class="table-wrap" style="max-height:none;">
         <table>
@@ -747,7 +741,7 @@ thead th.sorted{color:var(--accent);}
         </table>
       </div>
       <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.<br>
-      I due filtri qui sopra lavorano insieme: il <b>macroruolo classic</b> guarda il ruolo classic del giocatore (quindi un esterno classic D resta tra i difensori e uno classic C tra i centrocampisti), il <b>ruolo Mantra</b> sceglie le righe. Il filtro vale sia per la tabella sia per il ricalcolo, non viene salvato e non arriva al tuo socio.<br>
+      Il ↻ accanto a ogni ruolo rigenera solo quel ruolo, lasciando intatto tutto il resto: durante l'asta di un reparto non serve rimescolare le fasce già sistemate altrove.<br>
       <b>rif</b> = il prezzo che hai messo tu nel piano per quel ruolo e quella fascia. È il metro del surplus: paghi sopra il rif e vai in rosso, paghi sotto e risparmi. Quando una fascia non ha più slot da riempire il rif è spento a metà, perché prendere un giocatore lì significa togliere crediti a un altro reparto. Il <b>Surplus totale</b> qui sopra è lo stesso della Rosa, e il <b>Margine</b> dice se il piano sta ancora dentro il budget: se è rosso, i prezzi che hai impostato costano più di quanto hai in cassa.</p>
       </div>
     </details>
@@ -982,7 +976,7 @@ function confrontaPer(a, b, key, dir){
   const nb = (vb === null || vb === undefined || isNaN(vb)) ? -Infinity : Number(vb);
   return dir * (na - nb);
 }
-let listoneFilter = { search: '', ruolo: '', stato: '', squadra: '', soloPreferiti: false };
+let listoneFilter = { search: '', macro: '', ruolo: '', stato: '', squadra: '', soloPreferiti: false };
 
 function normNome(s){ return String(s||'').trim().toLowerCase(); }
 function applyStats(){
@@ -1982,7 +1976,11 @@ document.getElementById('btn-clear-stats').addEventListener('click', async ()=>{
 
 // ---------------- LISTONE ----------------
 function passesFilter(p){
-  const { search, ruolo, stato, soloPreferiti } = listoneFilter;
+  const { search, macro, ruolo, stato, soloPreferiti } = listoneFilter;
+  // macroruolo classic: reparto con cui il giocatore viene chiamato in asta. Va letto dal campo
+  // `r`, non dedotto dai ruoli Mantra, altrimenti un esterno classic D come Dimarco non
+  // comparirebbe tra i difensori proprio mentre la lega li sta facendo.
+  if(macro && String(p.r||'').toUpperCase() !== macro) return false;
   // filtro per ruolo Mantra: basta che il ruolo cercato compaia tra i ruoli del giocatore,
   // anche come secondo/terzo — così cercando "T" escono anche i "T;A", i "C;T", ecc.
   if(ruolo){
@@ -2080,6 +2078,7 @@ function renderListone(){
   });
 }
 document.getElementById('f-search').addEventListener('input', e=>{ listoneFilter.search = e.target.value; renderListone(); });
+document.getElementById('f-macro').addEventListener('change', e=>{ listoneFilter.macro = e.target.value; renderListone(); });
 document.getElementById('f-ruolo').addEventListener('change', e=>{ listoneFilter.ruolo = e.target.value; renderListone(); });
 document.getElementById('f-stato').addEventListener('change', e=>{ listoneFilter.stato = e.target.value; renderListone(); });
 document.getElementById('f-squadra').addEventListener('change', e=>{ listoneFilter.squadra = e.target.value; renderListone(); });
@@ -2286,30 +2285,6 @@ const ROLE_LABELS = {
 
 function primaryRole(p){ return String(p.rm||'').split(';').filter(Boolean)[0] || p.r; }
 
-// Macroruoli "classic" del listone (P/D/C/A). Li tengo separati dai ruoli Mantra e li leggo dal
-// campo `r` del giocatore, non dal suo ruolo Mantra: in Mantra un esterno può essere classic D
-// (Dimarco) o classic C (Saelemaekers), quindi un raggruppamento fatto a tavolino sbaglierebbe.
-// In asta i giocatori si chiamano per reparto classico, ed è così che si filtra qui.
-const MACRO_ORDER = ['P','D','C','A'];
-const MACRO_LABELS = { P:'Portieri', D:'Difensori', C:'Centrocampisti', A:'Attaccanti' };
-// Su quali righe lavorare nella lista consigliati. Solo in memoria: è un filtro di lavoro
-// durante l'asta, non un'impostazione da salvare o sincronizzare con il socio.
-let consRuoli = new Set(ROLES_GRAN);
-let consMacro = new Set(MACRO_ORDER);
-function consRuoliAttivi(){ return ROLES_GRAN.filter(r => consRuoli.has(r)); }
-function consMacroOk(p){
-  const m = String(p.r||'').toUpperCase();
-  return MACRO_LABELS[m] ? consMacro.has(m) : true; // ruolo classic sconosciuto: non lo escludo
-}
-// Un clic isola il ruolo su cui stai lavorando (utile quando la lega sta facendo i Dc), i clic
-// successivi aggiungono o tolgono, e togliendo l'ultimo rimasto si torna a tutti.
-function toggleFiltro(set, tutti, valore){
-  if(set.size === tutti.length){ set.clear(); set.add(valore); return; }
-  if(set.has(valore)){
-    set.delete(valore);
-    if(set.size === 0) tutti.forEach(v=> set.add(v));
-  } else set.add(valore);
-}
 
 function renderModuloHint(){
   const slots = MODULI[modulo] || [];
@@ -2642,12 +2617,14 @@ function effectiveFascia(p, autoFasce){
 }
 
 const MIN_CONSIGLIATI_PER_FASCIA = 5;
-function generaConsigliati(){
+// Con un ruolo passato rigenera solo quello (il ↻ accanto alla riga), senza argomenti li fa
+// tutti. Durante l'asta di un reparto rimescolare le fasce degli altri ruoli — magari già
+// sistemate a mano — è esattamente ciò che non si vuole.
+function generaConsigliati(soloRuolo){
   const { titolari, totale } = computeTotaliPerRuolo();
-  // Rigenero solo i ruoli selezionati: durante l'asta di un reparto non ha senso rimescolare
-  // le fasce di tutti gli altri, che magari hai già sistemato a mano.
-  consRuoliAttivi().forEach(r=>{
-    const candidates = PLAYERS.filter(p => primaryRole(p) === r && consMacroOk(p) && !isTaken(p.nome));
+  const daFare = soloRuolo ? [soloRuolo] : ROLES_GRAN;
+  daFare.forEach(r=>{
+    const candidates = PLAYERS.filter(p => primaryRole(p) === r && !isTaken(p.nome));
     const tit = titolari[r] || 0, tot = totale[r] || 0, bench = Math.max(tot - tit, 0);
     const target2 = Math.ceil(bench * 0.4);
     const target = {
@@ -2678,46 +2655,8 @@ function generaConsigliati(){
   });
   renderConsigliati(); renderListone();
 }
-document.getElementById('btn-genera-consigliati').addEventListener('click', generaConsigliati);
-document.getElementById('btn-cons-tutti').addEventListener('click', ()=>{
-  consRuoli = new Set(ROLES_GRAN); consMacro = new Set(MACRO_ORDER);
-  renderConsigliati();
-});
-
-// Descrizione compatta del filtro attivo, riusata sul bottone e nella nota.
-function filtroConsAttivo(){ return consMacro.size < MACRO_ORDER.length || consRuoli.size < ROLES_GRAN.length; }
-function descrizioneFiltroCons(){
-  const parti = [];
-  if(consMacro.size < MACRO_ORDER.length) parti.push(MACRO_ORDER.filter(m=>consMacro.has(m)).join('/'));
-  if(consRuoli.size < ROLES_GRAN.length) parti.push(consRuoliAttivi().join(', '));
-  return parti.join(' · ');
-}
-function renderConsFiltri(){
-  const mc = document.getElementById('cons-macro-chips');
-  const rc = document.getElementById('cons-ruolo-chips');
-  if(!mc || !rc) return;
-  mc.innerHTML = MACRO_ORDER.map(m=>
-    `<span class="chip-sel${consMacro.has(m)?' on':''}" data-macro="${m}" title="${MACRO_LABELS[m]}">${m}</span>`).join('');
-  rc.innerHTML = ROLES_GRAN.map(r=>
-    `<span class="chip-sel${consRuoli.has(r)?' on':''}" data-ruolo="${r}" title="${ROLE_LABELS[r]}">${r}</span>`).join('');
-  mc.querySelectorAll('[data-macro]').forEach(el=> el.addEventListener('click', ()=>{
-    toggleFiltro(consMacro, MACRO_ORDER, el.dataset.macro); renderConsigliati();
-  }));
-  rc.querySelectorAll('[data-ruolo]').forEach(el=> el.addEventListener('click', ()=>{
-    toggleFiltro(consRuoli, ROLES_GRAN, el.dataset.ruolo); renderConsigliati();
-  }));
-
-  const btn = document.getElementById('btn-genera-consigliati');
-  const note = document.getElementById('cons-filtro-note');
-  const desc = descrizioneFiltroCons();
-  if(btn) btn.textContent = filtroConsAttivo() ? `🎯 Genera consigliati · ${desc}` : '🎯 Genera consigliati';
-  if(note){
-    note.style.color = filtroConsAttivo() ? 'var(--gold)' : '';
-    note.textContent = filtroConsAttivo()
-      ? `Filtro attivo su ${desc}: il ricalcolo tocca solo questi, la tabella qui sotto mostra solo questi. Tutto il resto resta com'è.`
-      : 'Clicca un ruolo per lavorare solo su quello: il ricalcolo e la tabella si limitano alla selezione, gli altri ruoli restano intatti.';
-  }
-}
+// il listener passa l'evento come primo argomento: senza il wrapper finirebbe in soloRuolo
+document.getElementById('btn-genera-consigliati').addEventListener('click', ()=> generaConsigliati());
 
 // Surplus totale e Margine ripetuti sopra la lista consigliati: la card Margine originale vive
 // dentro l'accordion "Piano rosa", che è chiuso di default, quindi in asta non la si vede mai.
@@ -2742,14 +2681,9 @@ function renderConsigliati(){
   const rimPerFascia = {};
   b.rows.forEach(row=>{ rimPerFascia[row.r] = {1:row.rim1, 2:row.rim2, 3:row.rim3}; });
   renderConsigliatiCards(b);
-  renderConsFiltri();
-  const macroRistretto = consMacro.size < MACRO_ORDER.length;
   const tbody = document.getElementById('consigliati-body');
-  tbody.innerHTML = consRuoliAttivi().map(r=>{
-    const candidates = PLAYERS.filter(p => primaryRole(p) === r && consMacroOk(p) && getPref(p.nome).pref && !isTaken(p.nome));
-    // Con un filtro di reparto attivo, le righe rimaste completamente vuote sono solo rumore:
-    // quel ruolo Mantra non ha giocatori di quel macroruolo classic.
-    if(macroRistretto && candidates.length === 0) return '';
+  tbody.innerHTML = ROLES_GRAN.map(r=>{
+    const candidates = PLAYERS.filter(p => primaryRole(p) === r && getPref(p.nome).pref && !isTaken(p.nome));
     const cell = f => {
       const list = candidates.filter(p => effectiveFascia(p, autoFasce) === f).sort((a,b)=> suggestScore(b)-suggestScore(a));
       if(list.length === 0) return '<span style="color:var(--muted2);">—</span>';
@@ -2768,13 +2702,15 @@ function renderConsigliati(){
       }).join('');
     };
     return `<tr>
-      <td><span class="tag role-${roleColorClass(r)}">${r}</span> ${ROLE_LABELS[r]}</td>
+      <td><div class="cons-ruolo"><span class="tag role-${roleColorClass(r)}">${r}</span>
+        <span class="cons-ruolo-nome">${ROLE_LABELS[r]}</span>
+        <button class="cons-rigenera" data-rigenera="${r}" title="Rigenera solo i consigliati ${ROLE_LABELS[r]}, senza toccare gli altri ruoli">↻</button></div></td>
       <td>${cell(1)}</td><td>${cell(2)}</td><td>${cell(3)}</td>
     </tr>`;
   }).join('');
-  if(!tbody.innerHTML){
-    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted2);">Nessun consigliato per il filtro attivo — prova a generarli o allarga la selezione.</td></tr>';
-  }
+  tbody.querySelectorAll('button[data-rigenera]').forEach(el=>{
+    el.addEventListener('click', ()=> generaConsigliati(el.dataset.rigenera));
+  });
   tbody.querySelectorAll('button[data-nome]').forEach(el=>{
     el.addEventListener('click', ()=>{
       // azzera davvero: stella, fascia e blocco manuale, così il giocatore torna
