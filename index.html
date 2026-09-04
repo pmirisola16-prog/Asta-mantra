@@ -263,8 +263,7 @@ button.icon-btn:hover{background:#3B2A28;}
 .consigliato-chip .cc-nome{display:flex;align-items:center;gap:3px;min-width:0;flex-wrap:wrap;}
 .consigliato-chip .cc-bid{flex:0 0 auto;font-size:10.5px;color:var(--muted2);white-space:nowrap;margin-left:auto;}
 .consigliato-chip .cc-bid.off{opacity:.5;}
-.consigliato-chip .cc-bid b.bid-ok{color:var(--gold);font-weight:700;}
-.consigliato-chip .cc-bid b.bid-neg{color:var(--danger);font-weight:700;}
+
 .consigliato-chip .tag.mantra{font-size:9.5px;padding:1px 5px;margin:0;}
 
 /* ---------- table ---------- */
@@ -715,6 +714,7 @@ thead th.sorted{color:var(--accent);}
       <div class="row" style="margin-bottom:16px;">
         <button class="btn" id="btn-genera-consigliati">🎯 Genera consigliati</button>
       </div>
+      <div class="cards" id="consigliati-cards" style="margin-bottom:16px;"></div>
       <div class="table-wrap" style="max-height:none;">
         <table>
           <thead><tr><th>Ruolo</th><th>1ª fascia</th><th>2ª fascia</th><th>3ª fascia</th></tr></thead>
@@ -722,7 +722,7 @@ thead th.sorted{color:var(--accent);}
         </table>
       </div>
       <p class="footer-note">La fascia 1 è il ~12% più quotato del ruolo, la fascia 2 il successivo ~33%, il resto fascia 3 — soglie statistiche, non impostazioni tue. Clicca la × per togliere un giocatore dai preferiti (torna libero anche nel Listone). Per aggiungerne uno a mano, vai al Listone e clicca la stella.<br>
-      <b>rif</b> = il prezzo che hai messo tu nel piano per quel ruolo e quella fascia: è il metro su cui verrà misurato il surplus quando lo compri. <b>max</b> = <i>rif + margine</i>, cioè fin dove puoi spingerti su quel singolo giocatore continuando a poterti permettere tutti gli slot che restano. Se una fascia non ha più slot da riempire nel piano, il tetto è spento perché non avrebbe significato: pagare lì vuol dire togliere crediti a un altro reparto.</p>
+      <b>rif</b> = il prezzo che hai messo tu nel piano per quel ruolo e quella fascia. È il metro del surplus: paghi sopra il rif e vai in rosso, paghi sotto e risparmi. Quando una fascia non ha più slot da riempire il rif è spento a metà, perché prendere un giocatore lì significa togliere crediti a un altro reparto. Il <b>Surplus totale</b> qui sopra è lo stesso della Rosa, e il <b>Margine</b> dice se il piano sta ancora dentro il budget: se è rosso, i prezzi che hai impostato costano più di quanto hai in cassa.</p>
       </div>
     </details>
   </section>
@@ -2161,6 +2161,15 @@ function surplusDiAcquisto(voce, p){
   return { f, rif, delta: Math.round((Number(voce.prezzo)||0) - rif) };
 }
 
+function surplusTotaleRosa(){
+  return rosa.reduce((s,x)=>{
+    const p = byNome[x.nome];
+    if(!p) return s;
+    const d = surplusDiAcquisto(x, p);
+    return s + (d ? d.delta : 0);
+  }, 0);
+}
+
 function renderRosa(){
   ensureCoreState();
   const speso = rosa.reduce((s,x)=>s+(Number(x.prezzo)||0),0);
@@ -2181,13 +2190,11 @@ function renderRosa(){
   document.getElementById('c-mov').textContent = movPresi + ' / ' + settings.nMovimento;
   document.getElementById('c-avg').textContent = slotRimanenti>0 ? avg.toFixed(1) : '—';
 
-  let surplusTot = 0;
   const tbody = document.getElementById('rosa-body');
   tbody.innerHTML = rosa.map((x,i)=>{
     const p = byNome[x.nome];
     if(!p) return `<tr><td colspan="7" style="color:var(--danger);">${escHtml(x.nome)} non trovato nel listone attivo <button class="icon-btn" data-i="${i}">✕</button></td></tr>`;
     const s = surplusDiAcquisto(x, p);
-    if(s) surplusTot += s.delta;
     const surplusCell = s
       ? `<td class="mono" style="color:${s.delta > 0 ? 'var(--danger)' : (s.delta < 0 ? 'var(--accent)' : 'var(--muted2)')};font-weight:${s.delta===0?'400':'700'};" title="${s.f}ª fascia · riferimento di piano ${s.rif} cr">${s.delta > 0 ? '+' : ''}${s.delta}</td>`
       : `<td class="mono" style="color:var(--muted2);" title="Nessun prezzo di riferimento per questo ruolo">—</td>`;
@@ -2202,8 +2209,9 @@ function renderRosa(){
     </tr>`;
   }).join('');
 
+  const surplusTot = Math.round(surplusTotaleRosa());
   const surplusEl = document.getElementById('c-surplus');
-  surplusEl.textContent = rosa.length ? ((surplusTot > 0 ? '+' : '') + Math.round(surplusTot) + ' cr') : '—';
+  surplusEl.textContent = rosa.length ? ((surplusTot > 0 ? '+' : '') + surplusTot + ' cr') : '—';
   surplusEl.className = 'v ' + (surplusTot > 0 ? 'danger' : (surplusTot < 0 ? 'accent' : ''));
   tbody.querySelectorAll('.icon-btn').forEach(el=>{
     el.addEventListener('click', async ()=>{
@@ -2582,14 +2590,29 @@ function generaConsigliati(){
 }
 document.getElementById('btn-genera-consigliati').addEventListener('click', generaConsigliati);
 
+// Surplus totale e Margine ripetuti sopra la lista consigliati: la card Margine originale vive
+// dentro l'accordion "Piano rosa", che è chiuso di default, quindi in asta non la si vede mai.
+function renderConsigliatiCards(b){
+  const el = document.getElementById('consigliati-cards');
+  if(!el) return;
+  const surplusTot = Math.round(surplusTotaleRosa());
+  const margine = Math.round(b.margine);
+  el.innerHTML = `
+    <div class="card"><div class="k" title="Somma degli scarti fra quanto hai pagato e i prezzi di riferimento del tuo piano">Surplus totale</div><div class="v ${surplusTot > 0 ? 'danger' : (surplusTot < 0 ? 'accent' : '')}">${rosa.length ? (surplusTot>0?'+':'') + surplusTot + ' cr' : '—'}</div></div>
+    <div class="card"><div class="k" title="Saldo residuo meno il costo per completare tutti gli slot che restano">Margine</div><div class="v ${margine<0?'danger':'accent'}">${margine} cr</div></div>
+  `;
+}
+
 function renderConsigliati(){
   const autoFasce = computeAutoFasce();
-  // Il tetto d'offerta si appoggia al margine del piano: quanto avanza dopo aver messo da parte
-  // i crediti per tutti gli slot ancora da riempire. Su un singolo giocatore puoi arrivare
-  // al margine PIÙ il prezzo che il piano aveva già stanziato per quello slot.
+  // Accanto a ogni nome mostro solo il prezzo di riferimento del piano: è il metro su cui verrà
+  // misurato il surplus quando lo compri. Il tetto d'offerta per singolo giocatore l'ho tolto:
+  // era lo stesso margine ripetuto su centinaia di chip, e col margine negativo sembrava un errore.
+  // Il quadro d'insieme sta nelle due card qui sopra.
   const b = computeBudget();
   const rimPerFascia = {};
   b.rows.forEach(row=>{ rimPerFascia[row.r] = {1:row.rim1, 2:row.rim2, 3:row.rim3}; });
+  renderConsigliatiCards(b);
   const tbody = document.getElementById('consigliati-body');
   tbody.innerHTML = ROLES_GRAN.map(r=>{
     const candidates = PLAYERS.filter(p => primaryRole(p) === r && getPref(p.nome).pref && !isTaken(p.nome));
@@ -2597,13 +2620,12 @@ function renderConsigliati(){
       const list = candidates.filter(p => effectiveFascia(p, autoFasce) === f).sort((a,b)=> suggestScore(b)-suggestScore(a));
       if(list.length === 0) return '<span style="color:var(--muted2);">—</span>';
       const rif = Number((fasceCosti[r]||{})[f]) || 0;
-      const maxBid = Math.round(b.margine + rif);
+      // Fascia senza slot residui: riferimento spento, perché comprare lì vuol dire togliere
+      // crediti a un altro reparto invece di coprire un buco previsto dal piano.
       const senzaSlot = ((rimPerFascia[r]||{})[f] || 0) === 0;
-      // Senza slot residui pianificati in questa fascia il tetto non vuol dire niente: mostro solo
-      // il riferimento, spento, invece di un numero che inviterebbe a comprare uno slot inesistente.
       const bidHtml = senzaSlot
-        ? `<span class="cc-bid mono off" title="Il piano non prevede più slot di ${f}ª fascia per ${ROLE_LABELS[r]}: qui il tetto non ha significato">rif ${rif}</span>`
-        : `<span class="cc-bid mono" title="Riferimento di piano ${rif} cr + margine ${Math.round(b.margine)} cr">rif ${rif} · max <b class="${b.margine < 0 ? 'bid-neg' : 'bid-ok'}">${maxBid}</b></span>`;
+        ? `<span class="cc-bid mono off" title="Il piano non prevede più slot di ${f}ª fascia per ${ROLE_LABELS[r]}: prenderlo qui significa togliere crediti a un altro reparto">rif ${rif}</span>`
+        : `<span class="cc-bid mono" title="Prezzo di riferimento del tuo piano per ${ROLE_LABELS[r]} di ${f}ª fascia: pagando di più questo giocatore ti risulterà in surplus">rif ${rif}</span>`;
       return list.map(p => {
         const ruoli = String(p.rm||'').split(';').map(x=>x.trim()).filter(Boolean);
         const tagsRuoli = ruoli.map(mantraTag).join('');
